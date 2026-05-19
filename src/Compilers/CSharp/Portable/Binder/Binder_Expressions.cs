@@ -5925,7 +5925,8 @@ namespace Microsoft.CodeAnalysis.CSharp
             BoundExpression result = BindCollectionInitializerElementAddMethod(
                 elementInitializer,
                 ImmutableArray.Create(boundElementInitializer),
-                hasEnumerableInitializerType: true, // No IEnumerable requirement for object initializer Add elements
+                hasEnumerableInitializerType: true, // Pass true to bypass the IEnumerable guard in BindCollectionInitializerElementAddMethod;
+                                                     // object initializer Add elements do not require the type to implement IEnumerable.
                 collectionInitializerAddMethodBinder,
                 diagnostics,
                 implicitReceiver);

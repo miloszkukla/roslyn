@@ -1603,7 +1603,8 @@ IObjectCreationOperation (Constructor: MemberInitializerTest..ctor()) (Operation
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "y").WithArguments("MemberInitializerTest.y", "0").WithLocation(4, 19),
                 // CS8652: The feature 'object creation element initializer' is currently in Preview and *unsupported*.
                 //         var i = /*<bind>*/new MemberInitializerTest { x = 0, y++ }/*</bind>*/;
-                Diagnostic(ErrorCode.ERR_FeatureInPreview, "y++").WithArguments("object creation element initializer").WithLocation(7, 62)            };
+                Diagnostic(ErrorCode.ERR_FeatureInPreview, "y++").WithArguments("object creation element initializer").WithLocation(7, 62)
+            };
 
             VerifyOperationTreeAndDiagnosticsForTest<ObjectCreationExpressionSyntax>(source, expectedOperationTree, expectedDiagnostics, parseOptions: TestOptions.Regular14);
         }
