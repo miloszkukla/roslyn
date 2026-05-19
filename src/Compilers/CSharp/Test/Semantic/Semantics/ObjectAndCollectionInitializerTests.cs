@@ -1578,6 +1578,10 @@ class MemberInitializerTest
     }
 }
 ";
+            // Below preview, bare non-assignment elements in object initializers produce CS8652 (feature in
+            // preview) so that Visual Studio can offer an "Upgrade to C# preview" quick action.
+            // The element 'y++' is represented as IInvalidOperation with no children because the expression
+            // is not bound when the feature is unavailable.
             string expectedOperationTree = @"
 IObjectCreationOperation (Constructor: MemberInitializerTest..ctor()) (OperationKind.ObjectCreation, Type: MemberInitializerTest, IsInvalid) (Syntax: 'new MemberI ...  = 0, y++ }')
   Arguments(0)
@@ -1591,20 +1595,15 @@ IObjectCreationOperation (Constructor: MemberInitializerTest..ctor()) (Operation
                   IInstanceReferenceOperation (ReferenceKind: ImplicitReceiver) (OperationKind.InstanceReference, Type: MemberInitializerTest, IsImplicit) (Syntax: 'x')
             Right: 
               ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 0) (Syntax: '0')
-          IIncrementOrDecrementOperation (Postfix) (OperationKind.Increment, Type: ?, IsInvalid) (Syntax: 'y++')
-            Target: 
-              IFieldReferenceOperation: System.Int32 MemberInitializerTest.y (OperationKind.FieldReference, Type: System.Int32, IsInvalid) (Syntax: 'y')
-                Instance Receiver: 
-                  IInstanceReferenceOperation (ReferenceKind: ContainingTypeInstance) (OperationKind.InstanceReference, Type: MemberInitializerTest, IsInvalid, IsImplicit) (Syntax: 'y')
+          IInvalidOperation (OperationKind.Invalid, Type: ?, IsInvalid) (Syntax: 'y++')
+            Children(0)
 ";
             var expectedDiagnostics = new DiagnosticDescription[] {
-                // CS0120: An object reference is required for the non-static field, method, or property 'MemberInitializerTest.y'
+                // CS0649: Field 'MemberInitializerTest.y' is never assigned to, and will always have its default value 0
+                Diagnostic(ErrorCode.WRN_UnassignedInternalField, "y").WithArguments("MemberInitializerTest.y", "0").WithLocation(4, 19),
+                // CS8652: The feature 'object creation element initializer' is currently in Preview and *unsupported*.
                 //         var i = /*<bind>*/new MemberInitializerTest { x = 0, y++ }/*</bind>*/;
-                Diagnostic(ErrorCode.ERR_ObjectRequired, "y").WithArguments("MemberInitializerTest.y").WithLocation(7, 62),
-                // CS0747: Invalid initializer member declarator
-                //         var i = /*<bind>*/new MemberInitializerTest { x = 0, y++ }/*</bind>*/;
-                Diagnostic(ErrorCode.ERR_InvalidInitializerElementInitializer, "y++").WithLocation(7, 62)
-            };
+                Diagnostic(ErrorCode.ERR_FeatureInPreview, "y++").WithArguments("object creation element initializer").WithLocation(7, 62)            };
 
             VerifyOperationTreeAndDiagnosticsForTest<ObjectCreationExpressionSyntax>(source, expectedOperationTree, expectedDiagnostics, parseOptions: TestOptions.Regular14);
         }
@@ -2877,16 +2876,8 @@ IInvalidOperation (OperationKind.Invalid, Type: Dictionary<System.Object, System
               Children(2):
                   ILiteralOperation (OperationKind.Literal, Type: System.String, Constant: ""s"", IsInvalid) (Syntax: '""s""')
                   ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 1, IsInvalid) (Syntax: '1')
-            ISimpleAssignmentOperation (OperationKind.SimpleAssignment, Type: ?, IsInvalid, IsImplicit) (Syntax: 'var')
-              Left:
-                IInvalidOperation (OperationKind.Invalid, Type: ?, IsInvalid, IsImplicit) (Syntax: 'var')
-                  Children(1):
-                      IOperation:  (OperationKind.None, Type: null, IsInvalid) (Syntax: 'var')
-                        Children(1):
-                            IInstanceReferenceOperation (ReferenceKind: ImplicitReceiver) (OperationKind.InstanceReference, Type: Dictionary<System.Object, System.Object>, IsInvalid, IsImplicit) (Syntax: 'Dictionary< ... ct, object>')
-              Right:
-                IInvalidOperation (OperationKind.Invalid, Type: null, IsInvalid, IsImplicit) (Syntax: 'var')
-                  Children(0)
+            IInvalidOperation (OperationKind.Invalid, Type: ?, IsInvalid) (Syntax: 'var')
+              Children(0)
             ISimpleAssignmentOperation (OperationKind.SimpleAssignment, Type: ?, IsInvalid) (Syntax: 'x = 1')
               Left:
                 IInvalidOperation (OperationKind.Invalid, Type: ?, IsInvalid, IsImplicit) (Syntax: 'x')
@@ -2916,9 +2907,9 @@ IInvalidOperation (OperationKind.Invalid, Type: Dictionary<System.Object, System
                 // (8,13): error CS0747: Invalid initializer member declarator
                 //             {"s", 1 },
                 Diagnostic(ErrorCode.ERR_InvalidInitializerElementInitializer, @"{""s"", 1 }").WithLocation(8, 13),
-                // (9,9): error CS0747: Invalid initializer member declarator
+                // (9,9): error CS8652: The feature 'object creation element initializer' is currently in Preview and *unsupported*. To use Preview features, use the 'preview' language version.
                 //         var x = 1;
-                Diagnostic(ErrorCode.ERR_InvalidInitializerElementInitializer, "var").WithLocation(9, 9)
+                Diagnostic(ErrorCode.ERR_FeatureInPreview, "var").WithArguments("object creation element initializer").WithLocation(9, 9)
             };
 
             VerifyOperationTreeAndDiagnosticsForTest<ObjectCreationExpressionSyntax>(source, expectedOperationTree, expectedDiagnostics, parseOptions: TestOptions.Regular14);
@@ -4366,8 +4357,9 @@ interface I : IEnumerable<int>
         [Fact]
         public void ObjectCreationElementInitializer_RequiresPreview()
         {
-            // Bare expression elements in object initializers are not recognized in pre-preview language versions;
-            // they produce the standard object-initializer "invalid member declarator" error.
+            // Bare expression elements in object initializers require the preview language version.
+            // With an older language version, CS8652 (ERR_FeatureInPreview) is reported so that Visual Studio
+            // can offer an "Upgrade to C# preview" quick action.
             var source = """
                 class Container
                 {
@@ -4383,11 +4375,9 @@ interface I : IEnumerable<int>
                     }
                 }
                 """;
-            // With language version < preview, the bare expression is not recognized as an Add element,
-            // so the old ERR_InvalidInitializerElementInitializer error is produced.
             CreateCompilation(source, parseOptions: TestOptions.Regular14).VerifyDiagnostics(
-                // (11,48): error CS0747: Invalid initializer member declarator
-                Diagnostic(ErrorCode.ERR_InvalidInitializerElementInitializer, @"""a""").WithLocation(11, 48));
+                // (11,48): error CS8652: The feature 'object creation element initializer' is currently in Preview and *unsupported*. ...
+                Diagnostic(ErrorCode.ERR_FeatureInPreview, @"""a""").WithArguments("object creation element initializer").WithLocation(11, 48));
         }
 
         [Fact]

@@ -12039,8 +12039,12 @@ public class C
         return 1;
     }
 }";
-            CreateCompilation(text).VerifyDiagnostics(
-                Diagnostic(ErrorCode.ERR_InvalidInitializerElementInitializer, "1"));
+            // In preview, the bare element calls List<int>.Add(1) — no error.
+            CreateCompilation(text, parseOptions: TestOptions.RegularNext).VerifyDiagnostics();
+            // Below preview, the feature is not available and VS can offer an upgrade suggestion.
+            CreateCompilation(text, parseOptions: TestOptions.Regular14).VerifyDiagnostics(
+                // (8,47): error CS8652: The feature 'object creation element initializer' is currently in Preview and *unsupported*. ...
+                Diagnostic(ErrorCode.ERR_FeatureInPreview, "1").WithArguments("object creation element initializer").WithLocation(8, 47));
         }
 
         [Fact]

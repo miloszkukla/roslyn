@@ -5853,18 +5853,27 @@ namespace Microsoft.CodeAnalysis.CSharp
             // Member name map to report duplicate assignments to a field/property.
             var memberNameMap = PooledHashSet<string>.GetInstance();
 
-            // Bare element initializers (non-assignment expressions) in object initializers are only
-            // supported when the 'object creation element initializer' feature is available.
-            bool supportsElementInitializers = initializerSyntax.Kind() == SyntaxKind.ObjectInitializerExpression &&
-                Compilation.LanguageVersion >= MessageID.IDS_FeatureObjectCreationElementInitializer.RequiredVersion();
+            bool isObjectInitializer = initializerSyntax.Kind() == SyntaxKind.ObjectInitializerExpression;
 
             foreach (var memberInitializer in initializerSyntax.Expressions)
             {
                 BoundExpression boundMemberInitializer;
-                if (supportsElementInitializers && !IsObjectInitializerAssignment(memberInitializer))
+                if (isObjectInitializer && !IsObjectInitializerAssignment(memberInitializer))
                 {
-                    // A bare expression in an object initializer is bound as an Add method call.
-                    boundMemberInitializer = BindObjectInitializerAddElement(memberInitializer, initializerType, diagnostics, implicitReceiver);
+                    // Bare non-assignment element in an object initializer. This feature requires C# preview.
+                    // CheckFeatureAvailability emits CS8652 (ERR_FeatureInPreview) when language < preview,
+                    // allowing Visual Studio to offer an "Upgrade to C# preview" quick action.
+                    if (MessageID.IDS_FeatureObjectCreationElementInitializer.CheckFeatureAvailability(diagnostics, Compilation, memberInitializer.GetLocation()))
+                    {
+                        // Feature available — bind the bare expression as an Add method call.
+                        boundMemberInitializer = BindObjectInitializerAddElement(memberInitializer, initializerType, diagnostics, implicitReceiver);
+                    }
+                    else
+                    {
+                        // Feature not available in current language version — return a bad expression to
+                        // avoid cascading diagnostics on top of the already-reported CS8652.
+                        boundMemberInitializer = BadExpression(memberInitializer);
+                    }
                 }
                 else
                 {
