@@ -279,6 +279,9 @@
   <data name="IDS_FeatureCollectionInitializer" xml:space="preserve">
     <value>collection initializer</value>
   </data>
+  <data name="IDS_FeatureObjectCreationElementInitializer" xml:space="preserve">
+    <value>object creation element initializer</value>
+  </data>
   <data name="IDS_FeatureQueryExpression" xml:space="preserve">
     <value>query expression</value>
   </data>

@@ -1606,7 +1606,7 @@ IObjectCreationOperation (Constructor: MemberInitializerTest..ctor()) (Operation
                 Diagnostic(ErrorCode.ERR_InvalidInitializerElementInitializer, "y++").WithLocation(7, 62)
             };
 
-            VerifyOperationTreeAndDiagnosticsForTest<ObjectCreationExpressionSyntax>(source, expectedOperationTree, expectedDiagnostics);
+            VerifyOperationTreeAndDiagnosticsForTest<ObjectCreationExpressionSyntax>(source, expectedOperationTree, expectedDiagnostics, parseOptions: TestOptions.Regular14);
         }
 
         [CompilerTrait(CompilerFeature.IOperation)]
@@ -2921,7 +2921,7 @@ IInvalidOperation (OperationKind.Invalid, Type: Dictionary<System.Object, System
                 Diagnostic(ErrorCode.ERR_InvalidInitializerElementInitializer, "var").WithLocation(9, 9)
             };
 
-            VerifyOperationTreeAndDiagnosticsForTest<ObjectCreationExpressionSyntax>(source, expectedOperationTree, expectedDiagnostics);
+            VerifyOperationTreeAndDiagnosticsForTest<ObjectCreationExpressionSyntax>(source, expectedOperationTree, expectedDiagnostics, parseOptions: TestOptions.Regular14);
         }
 
         [CompilerTrait(CompilerFeature.IOperation)]
@@ -4334,5 +4334,161 @@ interface I : IEnumerable<int>
             AssertEx.Equal("System.Int32", typeInfo.Type.ToTestDisplayString());
             AssertEx.Equal("System.Int32", typeInfo.ConvertedType.ToTestDisplayString());
         }
+
+        #region "Object Creation Element Initializer (Add element support)"
+
+        [Fact]
+        public void ObjectCreationElementInitializer_Basic()
+        {
+            // Basic case: bare expression in object initializer calls Add
+            var source = """
+                class Container
+                {
+                    public string Name { get; set; }
+                    private System.Collections.Generic.List<string> _items = new();
+                    public void Add(string item) => _items.Add(item);
+                    public string[] Items => _items.ToArray();
+                }
+
+                class C
+                {
+                    static void Main()
+                    {
+                        var c = new Container { Name = "test", "a", "b" };
+                        System.Console.WriteLine(c.Name);
+                        System.Console.WriteLine(string.Join(",", c.Items));
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: TestOptions.RegularNext).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ObjectCreationElementInitializer_RequiresPreview()
+        {
+            // Bare expression elements in object initializers are not recognized in pre-preview language versions;
+            // they produce the standard object-initializer "invalid member declarator" error.
+            var source = """
+                class Container
+                {
+                    public string Name { get; set; }
+                    public void Add(string item) { }
+                }
+
+                class C
+                {
+                    static void Main()
+                    {
+                        var c = new Container { Name = "test", "a" };
+                    }
+                }
+                """;
+            // With language version < preview, the bare expression is not recognized as an Add element,
+            // so the old ERR_InvalidInitializerElementInitializer error is produced.
+            CreateCompilation(source, parseOptions: TestOptions.Regular14).VerifyDiagnostics(
+                // (11,48): error CS0747: Invalid initializer member declarator
+                Diagnostic(ErrorCode.ERR_InvalidInitializerElementInitializer, @"""a""").WithLocation(11, 48));
+        }
+
+        [Fact]
+        public void ObjectCreationElementInitializer_NoAddMethod_Error()
+        {
+            // Error when there's no applicable Add method
+            var source = """
+                class Container
+                {
+                    public string Name { get; set; }
+                }
+
+                class C
+                {
+                    static void Main()
+                    {
+                        var c = new Container { Name = "test", "a" };
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: TestOptions.RegularNext).VerifyDiagnostics(
+                // (10,48): error CS1061: 'Container' does not contain a definition for 'Add' ...
+                Diagnostic(ErrorCode.ERR_NoSuchMemberOrExtension, @"""a""").WithArguments("Container", "Add").WithLocation(10, 48));
+        }
+
+        [Fact]
+        public void ObjectCreationElementInitializer_NoIEnumerableRequired()
+        {
+            // Unlike collection initializers, no IEnumerable interface is required
+            var source = """
+                class Panel
+                {
+                    public string Name { get; set; }
+                    public void Add(object child) { }
+                }
+
+                class Button { }
+
+                class C
+                {
+                    static void Main()
+                    {
+                        var p = new Panel { Name = "test", new Button() };
+                        _ = p;
+                    }
+                }
+                """;
+            // Should compile without IEnumerable error
+            CreateCompilation(source, parseOptions: TestOptions.RegularNext).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ObjectCreationElementInitializer_MultipleElements()
+        {
+            // Multiple bare elements
+            var source = """
+                class Panel
+                {
+                    public string Name { get; set; }
+                    private System.Collections.Generic.List<string> _items = new();
+                    public void Add(string item) => _items.Add(item);
+                    public int Count => _items.Count;
+                }
+
+                class C
+                {
+                    static void Main()
+                    {
+                        var p = new Panel { Name = "test", "a", "b", "c" };
+                        System.Console.WriteLine(p.Count);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: TestOptions.RegularNext).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ObjectCreationElementInitializer_WithExpressionInitializer_Error()
+        {
+            // Bare elements are not allowed in with-expression initializers
+            var source = """
+                record Panel
+                {
+                    public string Name { get; set; }
+                    public void Add(object child) { }
+                }
+
+                class C
+                {
+                    static void Main()
+                    {
+                        var p = new Panel { Name = "test" };
+                        var p2 = p with { "a" };
+                    }
+                }
+                """;
+            // The with initializer doesn't support bare elements; they result in an error
+            CreateCompilation(source, parseOptions: TestOptions.RegularNext).VerifyDiagnostics(
+                Diagnostic(ErrorCode.ERR_InvalidInitializerElementInitializer, @"""a""").WithLocation(12, 27));
+        }
+
+        #endregion
     }
 }

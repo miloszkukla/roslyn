@@ -3072,6 +3072,11 @@
         <target state="translated">attribution conditionnelle nulle</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_FeatureObjectCreationElementInitializer">
+        <source>object creation element initializer</source>
+        <target state="new">object creation element initializer</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_FeatureOverloadResolutionPriority">
         <source>overload resolution priority</source>
         <target state="translated">priorité de résolution de surcharge</target>

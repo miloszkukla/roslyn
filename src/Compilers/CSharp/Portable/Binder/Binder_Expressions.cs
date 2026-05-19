@@ -5852,14 +5852,27 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             // Member name map to report duplicate assignments to a field/property.
             var memberNameMap = PooledHashSet<string>.GetInstance();
+
+            // Bare element initializers (non-assignment expressions) in object initializers are only
+            // supported when the 'object creation element initializer' feature is available.
+            bool supportsElementInitializers = initializerSyntax.Kind() == SyntaxKind.ObjectInitializerExpression &&
+                Compilation.LanguageVersion >= MessageID.IDS_FeatureObjectCreationElementInitializer.RequiredVersion();
+
             foreach (var memberInitializer in initializerSyntax.Expressions)
             {
-                BoundExpression boundMemberInitializer = BindInitializerMemberAssignment(
-                    memberInitializer, diagnostics, implicitReceiver);
+                BoundExpression boundMemberInitializer;
+                if (supportsElementInitializers && !IsObjectInitializerAssignment(memberInitializer))
+                {
+                    // A bare expression in an object initializer is bound as an Add method call.
+                    boundMemberInitializer = BindObjectInitializerAddElement(memberInitializer, initializerType, diagnostics, implicitReceiver);
+                }
+                else
+                {
+                    boundMemberInitializer = BindInitializerMemberAssignment(memberInitializer, diagnostics, implicitReceiver);
+                    ReportDuplicateObjectMemberInitializers(boundMemberInitializer, memberNameMap, diagnostics);
+                }
 
                 initializers.Add(boundMemberInitializer);
-
-                ReportDuplicateObjectMemberInitializers(boundMemberInitializer, memberNameMap, diagnostics);
             }
             memberNameMap.Free();
 
@@ -5868,6 +5881,48 @@ namespace Microsoft.CodeAnalysis.CSharp
                 implicitReceiver,
                 initializers.ToImmutableAndFree(),
                 initializerType);
+        }
+
+        /// <summary>
+        /// Returns true if the given expression should be handled by <see cref="BindInitializerMemberAssignment"/>
+        /// rather than as a bare Add element initializer. This covers assignment expressions and complex
+        /// element initializers (which would have been errors in earlier language versions).
+        /// </summary>
+        private static bool IsObjectInitializerAssignment(ExpressionSyntax memberInitializer)
+        {
+            var kind = memberInitializer.Kind();
+            // SimpleAssignmentExpression covers both valid named assignments (x = value, [key] = value)
+            // and invalid ones (Goo() = value) which produce ERR_InvalidInitializerElementInitializer.
+            // ComplexElementInitializerExpression covers { expr, expr } syntax which is not valid in
+            // object initializer context and should produce ERR_InvalidInitializerElementInitializer.
+            return kind is SyntaxKind.SimpleAssignmentExpression or SyntaxKind.ComplexElementInitializerExpression;
+        }
+
+        /// <summary>
+        /// Binds a bare expression in an object initializer as a call to the <c>Add</c> method on the initialized object.
+        /// The type does not need to implement <see cref="System.Collections.IEnumerable"/>.
+        /// </summary>
+        private BoundExpression BindObjectInitializerAddElement(
+            ExpressionSyntax elementInitializer,
+            TypeSymbol initializerType,
+            BindingDiagnosticBag diagnostics,
+            BoundObjectOrCollectionValuePlaceholder implicitReceiver)
+        {
+            // We use a location specific binder for binding the Add method invocation to generate specific overload resolution diagnostics.
+            var collectionInitializerAddMethodBinder = this.WithAdditionalFlags(BinderFlags.CollectionInitializerAddMethod);
+
+            BoundExpression boundElementInitializer = BindValue(elementInitializer, diagnostics, BindValueKind.RValue);
+
+            BoundExpression result = BindCollectionInitializerElementAddMethod(
+                elementInitializer,
+                ImmutableArray.Create(boundElementInitializer),
+                hasEnumerableInitializerType: true, // No IEnumerable requirement for object initializer Add elements
+                collectionInitializerAddMethodBinder,
+                diagnostics,
+                implicitReceiver);
+
+            result.WasCompilerGenerated = true;
+            return result;
         }
 
         private BoundExpression BindInitializerMemberAssignment(

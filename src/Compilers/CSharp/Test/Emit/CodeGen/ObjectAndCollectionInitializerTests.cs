@@ -3732,6 +3732,70 @@ static class Program
             CompileAndVerify(comp, expectedOutput: "12");
         }
 
+        [Fact]
+        public void ObjectCreationElementInitializer_CodeGen()
+        {
+            // Verify that bare expressions in object initializers are lowered to Add calls
+            var source = @"
+using System;
+
+class Panel
+{
+    public string Name;
+    private System.Collections.Generic.List<string> _items = new System.Collections.Generic.List<string>();
+
+    public void Add(string item)
+    {
+        _items.Add(item);
+    }
+
+    public static void Main()
+    {
+        var p = new Panel { Name = ""test"", ""alpha"", ""beta"" };
+        Console.Write(p.Name);
+        Console.Write("":"");
+        Console.Write(string.Join("","", p._items));
+    }
+}
+";
+            CompileAndVerify(source, expectedOutput: "test:alpha,beta", parseOptions: TestOptions.RegularNext);
+        }
+
+        [Fact]
+        public void ObjectCreationElementInitializer_NoIEnumerable()
+        {
+            // Verify the type does NOT need to implement IEnumerable
+            var source = @"
+using System;
+
+class Button
+{
+    public string Label;
+    public Button(string label) { Label = label; }
+}
+
+class StackPanel
+{
+    public string Name;
+    private System.Collections.Generic.List<Button> _children = new System.Collections.Generic.List<Button>();
+
+    public void Add(Button btn)
+    {
+        _children.Add(btn);
+    }
+
+    public static void Main()
+    {
+        var sp = new StackPanel { Name = ""C# FTW"", new Button(""btn1""), new Button(""btn2"") };
+        Console.Write(sp.Name);
+        Console.Write("":"");
+        Console.Write(sp._children.Count);
+    }
+}
+";
+            CompileAndVerify(source, expectedOutput: "C# FTW:2", parseOptions: TestOptions.RegularNext);
+        }
+
         #endregion
     }
 }

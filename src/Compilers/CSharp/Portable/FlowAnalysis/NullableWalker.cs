@@ -4534,6 +4534,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                             case BoundKind.AssignmentOperator:
                                 completion += VisitObjectElementInitializer(containingSlot, containingType, (BoundAssignmentOperator)initializer, delayCompletionForType);
                                 break;
+                            case BoundKind.CollectionElementInitializer:
+                                completion += VisitCollectionElementInitializer((BoundCollectionElementInitializer)initializer, containingType, delayCompletionForType);
+                                break;
                             default:
                                 VisitRvalue(initializer);
                                 break;

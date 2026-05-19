@@ -290,9 +290,26 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             foreach (var initializer in initializers)
             {
-                // In general bound initializers may contain bad expressions or assignments.
-                // We don't lower them if they contain errors, so it's safe to assume an assignment.
-                AddObjectInitializer(ref dynamicSiteInitializers, ref temps, result, rewrittenReceiver, (BoundAssignmentOperator)initializer);
+                // Bound initializers may contain bad expressions, member assignments, or (for object initializer
+                // Add elements) collection element initializers. We don't lower them if they contain errors.
+                if (initializer.Kind == BoundKind.CollectionElementInitializer)
+                {
+                    // This is a bare expression bound as an Add call from an object initializer.
+                    var rewrittenInitializer = MakeCollectionInitializer((BoundCollectionElementInitializer)initializer);
+                    if (rewrittenInitializer != null)
+                    {
+                        result.Add(rewrittenInitializer);
+                    }
+                }
+                else if (initializer.Kind == BoundKind.DynamicCollectionElementInitializer)
+                {
+                    var rewrittenInitializer = MakeDynamicCollectionInitializer(rewrittenReceiver, (BoundDynamicCollectionElementInitializer)initializer);
+                    result.Add(rewrittenInitializer);
+                }
+                else
+                {
+                    AddObjectInitializer(ref dynamicSiteInitializers, ref temps, result, rewrittenReceiver, (BoundAssignmentOperator)initializer);
+                }
             }
         }
 

@@ -3072,6 +3072,11 @@
         <target state="translated">null 조건부 할당</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_FeatureObjectCreationElementInitializer">
+        <source>object creation element initializer</source>
+        <target state="new">object creation element initializer</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_FeatureOverloadResolutionPriority">
         <source>overload resolution priority</source>
         <target state="translated">오버로드 해결 우선 순위</target>
